@@ -1,5 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine
+} from "https://esm.sh/recharts@2.10.0";
 
 const SUPABASE_URL = "https://svrmgurokzxlaxditxpg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2cm1ndXJva3p4bGF4ZGl0eHBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MzUzMTMsImV4cCI6MjA5MDAxMTMxM30.s4HcUeau23rHV_zrhslTOdKN6jfLrRfHrnRZ9kokHJI";
@@ -8,6 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const fmt    = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtPct = (n) => n == null ? "–" : `${Number(n).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
 const fmtEur = (n) => n == null ? "–" : `${fmt(n, 2)} €`;
+const fmtK   = (n) => n == null ? "–" : n >= 1000000 ? `${fmt(n/1000000,2)}M€` : n >= 1000 ? `${fmt(n/1000,1)}k` : fmt(n);
 
 function parseCSV(text) {
   text = text.replace(/^\uFEFF/, "");
@@ -66,6 +71,14 @@ function forecastSARIMA(values, months = 6) {
   });
 }
 
+function addMonths(ym, n) {
+  let [y, m] = ym.split("-").map(Number);
+  m += n;
+  while (m > 12) { m -= 12; y++; }
+  while (m < 1)  { m += 12; y--; }
+  return `${y}-${String(m).padStart(2,"0")}`;
+}
+
 const S = {
   input: { display:"block", width:"100%", padding:"8px 12px", borderRadius:8, border:"1px solid #d1d5db", fontSize:13, background:"#fff", color:"#111827", boxSizing:"border-box" },
   label: { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", marginBottom:6, textTransform:"uppercase", letterSpacing:".05em" },
@@ -75,6 +88,26 @@ const S = {
   card: { background:"#fff", borderRadius:14, padding:"16px 20px", border:"1px solid #e5e7eb", boxShadow:"0 1px 4px rgba(0,0,0,.05)" },
 };
 
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+function KPICard({ label, value, sub, delta, color }) {
+  const d = delta;
+  return (
+    <div style={{ ...S.card, borderTop:`3px solid ${color}` }}>
+      <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:28, fontWeight:800, color:"#111827", lineHeight:1, marginBottom:6 }}>{value}</div>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        {d != null && (
+          <span style={{ fontSize:12, fontWeight:600, padding:"2px 7px", borderRadius:20, background:d>=0?"#d1fae5":"#fee2e2", color:d>=0?"#065f46":"#991b1b" }}>
+            {d>=0?"▲":"▼"} {Math.abs(d).toFixed(2)}%
+          </span>
+        )}
+        <span style={{ fontSize:12, color:"#9ca3af" }}>{sub}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Upload Page ──────────────────────────────────────────────────────────────
 function UploadPage({ onDone }) {
   const [file, setFile]       = useState(null);
   const [period, setPeriod]   = useState("");
@@ -174,18 +207,21 @@ function UploadPage({ onDone }) {
   );
 }
 
+// ─── Dashboard Page ───────────────────────────────────────────────────────────
 function DashboardPage() {
   const [allData, setAllData]           = useState([]);
   const [stores, setStores]             = useState([]);
   const [periods, setPeriods]           = useState([]);
   const [selected, setSelected]         = useState("__all__");
-  const [activePeriod, setActivePeriod] = useState(null);
+  const [periodFrom, setPeriodFrom]     = useState(null);
+  const [periodTo, setPeriodTo]         = useState(null);
+  const [fcMonths, setFcMonths]         = useState(6);
+  const [chartMetric, setChartMetric]   = useState("flux");
   const [collapsed, setCollapsed]       = useState({});
   const [loading, setLoading]           = useState(true);
 
   const loadData = async () => {
     const { data: s } = await supabase.from("retail_stores").select("*").order("name");
-    // Pagination pour dépasser la limite de 1000 lignes
     let all = [], from = 0, batchSize = 500;
     while (true) {
       const { data: m } = await supabase
@@ -202,7 +238,8 @@ function DashboardPage() {
     setAllData(all);
     const ps = [...new Set(all.map(r => r.period.substring(0,7)))].sort();
     setPeriods(ps);
-    setActivePeriod(prev => prev || ps[ps.length-1] || null);
+    if (!periodTo) setPeriodTo(ps[ps.length-1]);
+    if (!periodFrom) setPeriodFrom(ps[Math.max(0, ps.length-12)]);
     setLoading(false);
   };
 
@@ -223,40 +260,54 @@ function DashboardPage() {
   };
 
   const storeRows = selected==="__all__" ? allData : allData.filter(r => r.retail_stores?.name===selected);
-  const series = periods.map(p => ({ period:p, ...agg(storeRows.filter(r => r.period.startsWith(p))) }));
+  const allSeries = periods.map(p => ({ period:p, ...agg(storeRows.filter(r => r.period.startsWith(p))) }));
 
-  const ap = activePeriod || periods[periods.length-1];
-  const apIdx = series.findIndex(s => s.period === ap);
-  const last = series[apIdx];
-  const prev = series[apIdx-1] || null;
-  const netAgg = agg(allData.filter(r => r.period.startsWith(ap)));
+  // Période sélectionnée pour les KPIs
+  const pFrom = periodFrom || periods[0];
+  const pTo   = periodTo   || periods[periods.length-1];
+  const selectedPeriods = allSeries.filter(s => s.period >= pFrom && s.period <= pTo);
 
-  const fluxVals = series.map(s => s.flux).filter(Boolean);
-  const fc = forecastSARIMA(fluxVals);
-  const [fy, fm] = (periods[periods.length-1]||"2026-01").split("-").map(Number);
-  const fcPeriods = fc.map((flux,i) => {
-    let nm=fm+i+1, ny=fy;
-    if(nm>12){nm-=12;ny++;}
-    return { period:`${ny}-${String(nm).padStart(2,"0")}`, flux };
-  });
+  // Agrégation sur la plage sélectionnée
+  const sumFlux = selectedPeriods.reduce((s,r) => s+(r.flux||0), 0);
+  const avgTT   = selectedPeriods.filter(r=>r.tt).length ? selectedPeriods.filter(r=>r.tt).reduce((s,r)=>s+r.tt,0)/selectedPeriods.filter(r=>r.tt).length : null;
+  const avgPM   = selectedPeriods.filter(r=>r.pm).length ? selectedPeriods.filter(r=>r.pm).reduce((s,r)=>s+r.pm,0)/selectedPeriods.filter(r=>r.pm).length : null;
+  const sumCA   = selectedPeriods.reduce((s,r) => s+(r.ca||0), 0);
 
-  const delta = (a,b) => (!a||!b) ? null : ((a-b)/Math.abs(b)*100);
-  const badge = (d) => d==null ? null : (
-    <span style={{ fontSize:11, fontWeight:600, padding:"2px 6px", borderRadius:20, background:d>=0?"#d1fae5":"#fee2e2", color:d>=0?"#065f46":"#991b1b" }}>
-      {d>=0?"▲":"▼"} {Math.abs(d).toFixed(2)}%
-    </span>
-  );
+  // Période précédente de même durée pour le delta
+  const nbMonths = selectedPeriods.length;
+  const prevFrom = addMonths(pFrom, -nbMonths);
+  const prevTo   = addMonths(pTo,   -nbMonths);
+  const prevPeriods = allSeries.filter(s => s.period >= prevFrom && s.period <= prevTo);
+  const prevFlux = prevPeriods.reduce((s,r) => s+(r.flux||0), 0);
+  const prevTT   = prevPeriods.filter(r=>r.tt).length ? prevPeriods.filter(r=>r.tt).reduce((s,r)=>s+r.tt,0)/prevPeriods.filter(r=>r.tt).length : null;
+  const prevPM   = prevPeriods.filter(r=>r.pm).length ? prevPeriods.filter(r=>r.pm).reduce((s,r)=>s+r.pm,0)/prevPeriods.filter(r=>r.pm).length : null;
+  const prevCA   = prevPeriods.reduce((s,r) => s+(r.ca||0), 0);
 
-  const KPI = ({ label, value, sub, d }) => (
-    <div style={S.card}>
-      <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", marginBottom:4 }}>{label}</div>
-      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:4 }}>
-        <span style={{ fontSize:24, fontWeight:700, color:"#111827" }}>{value}</span>
-        {badge(d)}
-      </div>
-      <div style={{ fontSize:12, color:"#6b7280" }}>{sub}</div>
-    </div>
-  );
+  const delta = (a,b) => (!a||!b||b===0) ? null : ((a-b)/Math.abs(b)*100);
+
+  // Données graphique — 12 derniers mois réels + prévisionnel
+  const last12 = allSeries.slice(-12);
+  const fluxVals = allSeries.map(s => s.flux).filter(Boolean);
+  const fc = forecastSARIMA(fluxVals, fcMonths);
+  const lastPeriod = periods[periods.length-1];
+  const fcData = fc.map((flux,i) => ({
+    period: addMonths(lastPeriod, i+1),
+    prevFlux: flux,
+    prevBas: Math.round(flux*0.93),
+    prevHaut: Math.round(flux*1.07),
+  }));
+
+  // Données chart selon métrique
+  const metricKey = { flux:"flux", ca:"ca", tt:"tt", pm:"pm" }[chartMetric];
+  const metricLabel = { flux:"Flux visiteurs", ca:"CA HT (€)", tt:"Taux transfo (%)", pm:"Panier moyen HT (€)" }[chartMetric];
+  const chartHistData = last12.map(s => ({ period: s.period, valeur: s[metricKey] }));
+  const chartFcData = fcData.map(s => ({ period: s.period, prevision: s.prevFlux }));
+  const combinedChart = [
+    ...chartHistData.map(d => ({ ...d, type:"hist" })),
+    ...( chartMetric === "flux" ? chartFcData.map(d => ({ period:d.period, prevision:d.prevision, type:"fc" })) : [] )
+  ];
+
+  const toggleYear = (year) => setCollapsed(prev => ({ ...prev, [year]: !prev[year] }));
 
   const handleDelete = async (period) => {
     if (!confirm(`Supprimer toutes les données de ${period} ?`)) return;
@@ -267,56 +318,108 @@ function DashboardPage() {
     }
   };
 
-  const toggleYear = (year) => setCollapsed(prev => ({ ...prev, [year]: !prev[year] }));
-
-  // Historique groupé par année
-  const reversed = series.slice().reverse();
+  const reversed = allSeries.slice().reverse();
   const histRows = [];
   let currentYear = null;
   reversed.forEach((s, i) => {
     const year = s.period.substring(0,4);
-    if (year !== currentYear) {
-      currentYear = year;
-      histRows.push({ type:"year", year });
-    }
+    if (year !== currentYear) { currentYear = year; histRows.push({ type:"year", year }); }
     histRows.push({ type:"row", s, i, year });
   });
 
-  return (
-    <div style={{ maxWidth:1100, margin:"0 auto", padding:"32px 24px" }}>
+  const btnMetric = (key, label) => (
+    <button key={key} onClick={() => setChartMetric(key)}
+      style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight:600, border:"none", cursor:"pointer",
+        background:chartMetric===key?"#4f46e5":"#f3f4f6", color:chartMetric===key?"#fff":"#6b7280" }}>
+      {label}
+    </button>
+  );
 
-      {/* Barre de contrôles */}
+  return (
+    <div style={{ maxWidth:1200, margin:"0 auto", padding:"28px 24px" }}>
+
+      {/* Contrôles */}
       <div style={{ display:"flex", alignItems:"flex-end", gap:12, marginBottom:28, flexWrap:"wrap" }}>
         <h2 style={{ fontSize:20, fontWeight:700, color:"#111827", flex:1, marginBottom:0 }}>
-          {selected==="__all__"?"Réseau complet":selected}
+          {selected==="__all__" ? "Réseau complet" : selected}
         </h2>
         <div>
-          <label style={S.label}>Période affichée</label>
-          <select value={ap} onChange={e=>setActivePeriod(e.target.value)} style={{ ...S.input, width:"auto", minWidth:140 }}>
+          <label style={S.label}>Du</label>
+          <select value={pFrom} onChange={e=>setPeriodFrom(e.target.value)} style={{ ...S.input, width:"auto", minWidth:130 }}>
+            {periods.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={S.label}>Au</label>
+          <select value={pTo} onChange={e=>setPeriodTo(e.target.value)} style={{ ...S.input, width:"auto", minWidth:130 }}>
             {periods.slice().reverse().map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
         <div>
           <label style={S.label}>Magasin</label>
-          <select value={selected} onChange={e=>setSelected(e.target.value)} style={{ ...S.input, width:"auto", minWidth:220 }}>
+          <select value={selected} onChange={e=>setSelected(e.target.value)} style={{ ...S.input, width:"auto", minWidth:200 }}>
             <option value="__all__">— Réseau global —</option>
             {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
           </select>
         </div>
       </div>
 
-      {/* KPI cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:14, marginBottom:32 }}>
-        <KPI label="Flux"                value={fmt(last?.flux)}    sub={`Réseau : ${fmt(netAgg?.flux)}`}    d={delta(last?.flux, prev?.flux)} />
-        <KPI label="Taux transformation"  value={fmtPct(last?.tt)}  sub={`Réseau : ${fmtPct(netAgg?.tt)}`}  d={delta(last?.tt,   prev?.tt)}   />
-        <KPI label="Panier moyen HT"      value={fmtEur(last?.pm)}  sub={`Réseau : ${fmtEur(netAgg?.pm)}`}  d={delta(last?.pm,   prev?.pm)}   />
-        <KPI label="CA HT"                value={fmtEur(last?.ca)}  sub={`Réseau : ${fmtEur(netAgg?.ca)}`}  d={delta(last?.ca,   prev?.ca)}   />
+      {/* Bandeau période */}
+      <div style={{ background:"#eef2ff", borderRadius:10, padding:"8px 16px", marginBottom:24, fontSize:13, color:"#4f46e5", fontWeight:600 }}>
+        📅 {nbMonths} mois sélectionné{nbMonths>1?"s":""} · {pFrom} → {pTo}
+        {nbMonths > 1 && <span style={{ fontWeight:400, color:"#6b7280", marginLeft:8 }}>comparé à la période précédente ({prevFrom} → {prevTo})</span>}
       </div>
 
-      {/* Historique groupé par année collapsible */}
+      {/* KPI cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:16, marginBottom:32 }}>
+        <KPICard label="Flux visiteurs"      value={fmt(sumFlux)}   sub={`moy. mensuelle : ${fmt(sumFlux/nbMonths)}`}   delta={delta(sumFlux,prevFlux)} color="#6366f1" />
+        <KPICard label="Taux transformation" value={fmtPct(avgTT)}  sub={`période préc. : ${fmtPct(prevTT)}`}           delta={delta(avgTT,prevTT)}     color="#10b981" />
+        <KPICard label="Panier moyen HT"     value={fmtEur(avgPM)}  sub={`période préc. : ${fmtEur(prevPM)}`}           delta={delta(avgPM,prevPM)}     color="#f59e0b" />
+        <KPICard label="CA HT total"         value={fmtK(sumCA)}    sub={`moy. mensuelle : ${fmtEur(sumCA/nbMonths)}`}  delta={delta(sumCA,prevCA)}     color="#3b82f6" />
+      </div>
+
+      {/* Graphique évolution */}
+      <div style={{ ...S.card, marginBottom:28 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+          <span style={{ fontWeight:600, fontSize:14, color:"#374151" }}>Évolution {metricLabel}</span>
+          <div style={{ display:"flex", gap:6 }}>
+            {btnMetric("flux","Flux")}
+            {btnMetric("ca","CA HT")}
+            {btnMetric("tt","TT %")}
+            {btnMetric("pm","PM HT")}
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={combinedChart} margin={{ top:5, right:20, bottom:5, left:10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="period" tick={{ fontSize:11, fill:"#9ca3af" }} />
+            <YAxis tick={{ fontSize:11, fill:"#9ca3af" }} tickFormatter={v => fmtK(v)} />
+            <Tooltip
+              formatter={(val, name) => {
+                if (name==="Historique") return chartMetric==="ca"||chartMetric==="pm" ? fmtEur(val) : chartMetric==="tt" ? fmtPct(val) : fmt(val);
+                if (name==="Prévision") return fmt(val);
+                return val;
+              }}
+              contentStyle={{ borderRadius:8, fontSize:12, border:"1px solid #e5e7eb" }}
+            />
+            <Legend iconType="circle" wrapperStyle={{ fontSize:12 }} />
+            {combinedChart.some(d => d.type==="hist") && (
+              <Bar dataKey="valeur" name="Historique" fill="#6366f1" fillOpacity={0.85} radius={[4,4,0,0]} />
+            )}
+            {chartMetric==="flux" && combinedChart.some(d => d.type==="fc") && (
+              <Line dataKey="prevision" name="Prévision" stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="5 4" dot={{ r:4, fill:"#f59e0b" }} connectNulls />
+            )}
+            {combinedChart.some(d => d.type==="fc") && (
+              <ReferenceLine x={lastPeriod} stroke="#e5e7eb" strokeDasharray="4 2" label={{ value:"aujourd'hui", fontSize:10, fill:"#9ca3af" }} />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Historique */}
       <div style={{ ...S.card, padding:0, overflow:"hidden", marginBottom:28 }}>
         <div style={{ padding:"14px 20px", borderBottom:"1px solid #f3f4f6", fontWeight:600, fontSize:14, color:"#374151" }}>
-          Historique mensuel
+          Historique mensuel complet
         </div>
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
@@ -330,27 +433,24 @@ function DashboardPage() {
                 if (item.type === "year") {
                   const isOpen = !collapsed[item.year];
                   return (
-                    <tr key={`year-${item.year}`} onClick={() => toggleYear(item.year)}
-                      style={{ cursor:"pointer", userSelect:"none" }}>
+                    <tr key={`year-${item.year}`} onClick={() => toggleYear(item.year)} style={{ cursor:"pointer", userSelect:"none" }}>
                       <td colSpan={6} style={{ padding:"8px 16px", fontSize:12, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:".08em", background:"#f3f4f6", borderTop:"2px solid #e5e7eb" }}>
-                        <span style={{ marginRight:8 }}>{isOpen ? "▾" : "▸"}</span>
-                        {item.year}
+                        <span style={{ marginRight:8 }}>{isOpen ? "▾" : "▸"}</span>{item.year}
                       </td>
                     </tr>
                   );
                 }
                 if (collapsed[item.year]) return null;
                 const { s } = item;
-                const isActive = s.period === ap;
+                const inRange = s.period >= pFrom && s.period <= pTo;
                 return (
-                  <tr key={s.period} style={{ borderTop:"1px solid #f3f4f6", background: isActive ? "#eef2ff" : "#fff", cursor:"pointer" }}
-                    onClick={() => setActivePeriod(s.period)}>
-                    <td style={{ ...S.td, fontWeight: isActive ? 700 : 600, color: isActive ? "#4f46e5" : "#374151" }}>{s.period}</td>
+                  <tr key={s.period} style={{ borderTop:"1px solid #f3f4f6", background: inRange ? "#eef2ff" : "#fff" }}>
+                    <td style={{ ...S.td, fontWeight:600, color: inRange ? "#4f46e5" : "#374151" }}>{s.period}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmt(s.flux)}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmtPct(s.tt)}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.pm)}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.ca)}</td>
-                    <td style={{ ...S.td, textAlign:"center" }} onClick={e => e.stopPropagation()}>
+                    <td style={{ ...S.td, textAlign:"center" }}>
                       <button onClick={() => handleDelete(s.period)}
                         style={{ background:"none", border:"1px solid #fca5a5", borderRadius:6, color:"#dc2626", fontSize:11, padding:"2px 8px", cursor:"pointer" }}>
                         ✕
@@ -364,39 +464,78 @@ function DashboardPage() {
         </div>
       </div>
 
-      {/* Prévisionnel */}
-      {fcPeriods.length > 0 && (
-        <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
-          <div style={{ padding:"14px 20px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <span style={{ fontWeight:600, fontSize:14, color:"#374151" }}>Prévisionnel flux — 6 mois</span>
-            <span style={{ fontSize:11, color:"#9ca3af" }}>SARIMA · ±7%</span>
-          </div>
-          <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-              <thead><tr style={{ background:"#f9fafb" }}>{["Période","Central","Bas −7%","Haut +7%","vs N−1"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {fcPeriods.map((f,i)=>{
-                  const ref=fluxVals[fluxVals.length-6+i];
-                  const evo=ref?((f.flux-ref)/ref*100):null;
-                  return (
-                    <tr key={f.period} style={{ borderTop:"1px solid #f3f4f6", background:i%2?"#eef2ff":"#f0f4ff" }}>
-                      <td style={{ ...S.td, fontWeight:600, color:"#4f46e5" }}>{f.period}</td>
-                      <td style={{ ...S.td, textAlign:"right", fontWeight:700, color:"#4f46e5" }}>{fmt(f.flux)}</td>
-                      <td style={{ ...S.td, textAlign:"right", color:"#6b7280" }}>{fmt(Math.round(f.flux*.93))}</td>
-                      <td style={{ ...S.td, textAlign:"right", color:"#6b7280" }}>{fmt(Math.round(f.flux*1.07))}</td>
-                      <td style={{ ...S.td, textAlign:"right" }}>{evo!=null&&<span style={{ color:evo>=0?"#059669":"#dc2626", fontWeight:600 }}>{evo>0?"+":""}{evo.toFixed(2)}%</span>}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Prévisionnel flux */}
+      <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
+        <div style={{ padding:"14px 20px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+          <span style={{ fontWeight:600, fontSize:14, color:"#374151" }}>Prévisionnel flux</span>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            <span style={{ fontSize:12, color:"#9ca3af" }}>Horizon :</span>
+            {[3,6,9,12,15,18].map(m => (
+              <button key={m} onClick={() => setFcMonths(m)}
+                style={{ padding:"4px 10px", borderRadius:20, fontSize:12, fontWeight:600, border:"none", cursor:"pointer",
+                  background:fcMonths===m?"#f59e0b":"#f3f4f6", color:fcMonths===m?"#fff":"#6b7280" }}>
+                {m}m
+              </button>
+            ))}
           </div>
         </div>
-      )}
+
+        {/* Mini graphique prévisionnel */}
+        <div style={{ padding:"16px 20px 0" }}>
+          <ResponsiveContainer width="100%" height={180}>
+            <ComposedChart margin={{ top:5, right:20, bottom:5, left:10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="period" tick={{ fontSize:10, fill:"#9ca3af" }} />
+              <YAxis tick={{ fontSize:10, fill:"#9ca3af" }} tickFormatter={v => fmtK(v)} />
+              <Tooltip contentStyle={{ borderRadius:8, fontSize:12 }} formatter={(v) => fmt(v)} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize:11 }} />
+              <Line
+                data={last12.map(s=>({period:s.period, flux:s.flux}))}
+                dataKey="flux" name="Réel" stroke="#6366f1" strokeWidth={2.5}
+                dot={{ r:3, fill:"#6366f1" }}
+              />
+              <Line
+                data={fcData}
+                dataKey="prevFlux" name="Prévision" stroke="#f59e0b" strokeWidth={2.5}
+                strokeDasharray="5 4" dot={{ r:3, fill:"#f59e0b" }}
+              />
+              <ReferenceLine x={lastPeriod} stroke="#e5e7eb" strokeDasharray="4 2" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead>
+              <tr style={{ background:"#fffbeb" }}>
+                {["Période","Flux central","Bas −7%","Haut +7%","vs N−1"].map(h=><th key={h} style={S.th}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {fcData.map((f,i)=>{
+                const ref = fluxVals[fluxVals.length - fcMonths + i] || fluxVals[fluxVals.length-1];
+                const evo = ref ? ((f.prevFlux-ref)/ref*100) : null;
+                return (
+                  <tr key={f.period} style={{ borderTop:"1px solid #f3f4f6", background:i%2?"#fffbeb":"#fff" }}>
+                    <td style={{ ...S.td, fontWeight:600, color:"#d97706" }}>{f.period}</td>
+                    <td style={{ ...S.td, textAlign:"right", fontWeight:700, color:"#d97706" }}>{fmt(f.prevFlux)}</td>
+                    <td style={{ ...S.td, textAlign:"right", color:"#9ca3af" }}>{fmt(f.prevBas)}</td>
+                    <td style={{ ...S.td, textAlign:"right", color:"#9ca3af" }}>{fmt(f.prevHaut)}</td>
+                    <td style={{ ...S.td, textAlign:"right" }}>
+                      {evo!=null && <span style={{ color:evo>=0?"#059669":"#dc2626", fontWeight:600 }}>{evo>0?"+":""}{evo.toFixed(2)}%</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
 
+// ─── App Root ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState("dashboard");
   const nav = (id, label) => (
@@ -405,8 +544,8 @@ export default function App() {
     </button>
   );
   return (
-    <div style={{ minHeight:"100vh", background:"#f9fafb", fontFamily:"system-ui,sans-serif" }}>
-      <div style={{ background:"#fff", borderBottom:"1px solid #e5e7eb", padding:"0 24px", display:"flex", alignItems:"center", gap:8, height:52 }}>
+    <div style={{ minHeight:"100vh", background:"#f5f5f7", fontFamily:"system-ui,sans-serif" }}>
+      <div style={{ background:"#fff", borderBottom:"1px solid #e5e7eb", padding:"0 24px", display:"flex", alignItems:"center", gap:8, height:52, position:"sticky", top:0, zIndex:10 }}>
         <span style={{ fontWeight:800, fontSize:15, color:"#111827", marginRight:16 }}>◈ Pilotage réseau</span>
         {nav("dashboard","Dashboard")}
         {nav("upload","Import CSV")}
