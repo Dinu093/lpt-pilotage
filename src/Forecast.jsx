@@ -70,28 +70,23 @@ function predictTT(model, flux, month) {
 function fitPMModel(series) {
   const valid = series.filter(s => s.pm != null && s.pm > 0);
   if (valid.length < 3) return null;
-  const n = valid.length;
-  const x = valid.map((_,i) => i);
-  const y = valid.map(s => s.pm);
-  let sx=0, sy=0, sxy=0, sx2=0;
-  for (let i=0; i<n; i++) { sx+=x[i]; sy+=y[i]; sxy+=x[i]*y[i]; sx2+=x[i]*x[i]; }
-  const slope = (n*sxy-sx*sy)/(n*sx2-sx*sx);
-  const intercept = (sy-slope*sx)/n;
+  // Moyenne PM par mois calendaire
   const seasSum = {}, seasCnt = {};
-  valid.forEach((s,i) => {
+  valid.forEach(s => {
     const m = parseInt(s.period.split("-")[1]);
-    const res = s.pm - (slope*i+intercept);
-    seasSum[m] = (seasSum[m]||0) + res;
+    seasSum[m] = (seasSum[m]||0) + s.pm;
     seasCnt[m] = (seasCnt[m]||0) + 1;
   });
   const seasonal = {};
-  for (let m=1; m<=12; m++) seasonal[m] = seasCnt[m] ? seasSum[m]/seasCnt[m] : 0;
-  return { slope, intercept, seasonal, n };
+  for (let m=1; m<=12; m++) seasonal[m] = seasCnt[m] ? seasSum[m]/seasCnt[m] : null;
+  // Moyenne globale comme fallback
+  const globalAvg = valid.reduce((s,r)=>s+r.pm,0)/valid.length;
+  return { seasonal, globalAvg, n: valid.length };
 }
 
 function predictPM(model, futureIndex, month) {
   if (!model) return null;
-  return Math.max(0, model.slope * futureIndex + model.intercept + (model.seasonal[month]||0));
+  return model.seasonal[month] ?? model.globalAvg;
 }
 
 function addMonths(ym, n) {
