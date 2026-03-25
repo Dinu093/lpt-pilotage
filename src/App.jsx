@@ -1,10 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import ForecastPage from "./Forecast.jsx";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, ReferenceLine
-} from "https://esm.sh/recharts@2.10.0";
+import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
 
 const SUPABASE_URL = "https://svrmgurokzxlaxditxpg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2cm1ndXJva3p4bGF4ZGl0eHBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MzUzMTMsImV4cCI6MjA5MDAxMTMxM30.s4HcUeau23rHV_zrhslTOdKN6jfLrRfHrnRZ9kokHJI";
