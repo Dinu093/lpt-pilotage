@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import ForecastPage from "./Forecast.jsx";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid,
@@ -548,9 +549,11 @@ export default function App() {
       <div style={{ background:"#fff", borderBottom:"1px solid #e5e7eb", padding:"0 24px", display:"flex", alignItems:"center", gap:8, height:52, position:"sticky", top:0, zIndex:10 }}>
         <span style={{ fontWeight:800, fontSize:15, color:"#111827", marginRight:16 }}>◈ Pilotage réseau</span>
         {nav("dashboard","Dashboard")}
+        {nav("forecast","Forecast")}
         {nav("upload","Import CSV")}
       </div>
       {page==="dashboard" && <DashboardPage />}
+      {page==="forecast"  && <ForecastPage />}
       {page==="upload"    && <UploadPage onDone={()=>setPage("dashboard")} />}
     </div>
   );
