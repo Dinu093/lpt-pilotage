@@ -70,23 +70,25 @@ function predictTT(model, flux, month) {
 function fitPMModel(series) {
   const valid = series.filter(s => s.pm != null && s.pm > 0);
   if (valid.length < 3) return null;
-  // Moyenne PM par mois calendaire
+  // Baseline = moyenne des 3 derniers mois
+  const recent = valid.slice(-3);
+  const baseline = recent.reduce((s,r) => s+r.pm, 0) / recent.length;
+  // Indice saisonnier = écart % de chaque mois par rapport à la moyenne annuelle
+  const globalAvg = valid.reduce((s,r) => s+r.pm, 0) / valid.length;
   const seasSum = {}, seasCnt = {};
   valid.forEach(s => {
     const m = parseInt(s.period.split("-")[1]);
-    seasSum[m] = (seasSum[m]||0) + s.pm;
+    seasSum[m] = (seasSum[m]||0) + (s.pm / globalAvg);
     seasCnt[m] = (seasCnt[m]||0) + 1;
   });
   const seasonal = {};
-  for (let m=1; m<=12; m++) seasonal[m] = seasCnt[m] ? seasSum[m]/seasCnt[m] : null;
-  // Moyenne globale comme fallback
-  const globalAvg = valid.reduce((s,r)=>s+r.pm,0)/valid.length;
-  return { seasonal, globalAvg, n: valid.length };
+  for (let m=1; m<=12; m++) seasonal[m] = seasCnt[m] ? seasSum[m]/seasCnt[m] : 1.0;
+  return { baseline, seasonal, globalAvg, n: valid.length };
 }
 
 function predictPM(model, futureIndex, month) {
   if (!model) return null;
-  return model.seasonal[month] ?? model.globalAvg;
+  return model.baseline * (model.seasonal[month] || 1.0);
 }
 
 function addMonths(ym, n) {
