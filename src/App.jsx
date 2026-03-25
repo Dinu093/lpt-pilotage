@@ -10,7 +10,6 @@ const fmtPct = (n) => n == null ? "–" : `${Number(n).toLocaleString("fr-FR", {
 const fmtEur = (n) => n == null ? "–" : `${fmt(n, 2)} €`;
 
 function parseCSV(text) {
-  // Gère tous les formats de retour à la ligne : \r\n, \r, \n
   text = text.replace(/^\uFEFF/, "");
   const lines = text.split(/\r\n|\r|\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
@@ -176,22 +175,25 @@ function UploadPage({ onDone }) {
 }
 
 function DashboardPage() {
-  const [allData, setAllData]   = useState([]);
-  const [stores, setStores]     = useState([]);
-  const [periods, setPeriods]   = useState([]);
-  const [selected, setSelected] = useState("__all__");
-  const [loading, setLoading]   = useState(true);
+  const [allData, setAllData]       = useState([]);
+  const [stores, setStores]         = useState([]);
+  const [periods, setPeriods]       = useState([]);
+  const [selected, setSelected]     = useState("__all__");
+  const [activePeriod, setActivePeriod] = useState(null);
+  const [loading, setLoading]       = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      const { data: s } = await supabase.from("retail_stores").select("*").order("name");
-      const { data: m } = await supabase.from("retail_monthly_data").select("*, retail_stores(name,placement)").order("period");
-      setStores(s || []);
-      setAllData(m || []);
-      setPeriods([...new Set((m||[]).map(r => r.period.substring(0,7)))].sort());
-      setLoading(false);
-    })();
-  }, []);
+  const loadData = async () => {
+    const { data: s } = await supabase.from("retail_stores").select("*").order("name");
+    const { data: m } = await supabase.from("retail_monthly_data").select("*, retail_stores(name,placement)").order("period");
+    setStores(s || []);
+    setAllData(m || []);
+    const ps = [...new Set((m||[]).map(r => r.period.substring(0,7)))].sort();
+    setPeriods(ps);
+    setActivePeriod(prev => prev || ps[ps.length-1] || null);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   if (loading) return <div style={{ padding:40, textAlign:"center", color:"#9ca3af" }}>Chargement…</div>;
   if (!allData.length) return <div style={{ padding:40, textAlign:"center", color:"#6b7280" }}>Aucune donnée — importez un CSV.</div>;
@@ -207,11 +209,17 @@ function DashboardPage() {
     };
   };
 
-  const net = agg(allData.filter(r => r.period.startsWith(periods[periods.length-1])));
   const storeRows = selected==="__all__" ? allData : allData.filter(r => r.retail_stores?.name===selected);
   const series = periods.map(p => ({ period:p, ...agg(storeRows.filter(r => r.period.startsWith(p))) }));
-  const last = series[series.length-1];
-  const prev = series[series.length-2];
+
+  const ap = activePeriod || periods[periods.length-1];
+  const apIdx = series.findIndex(s => s.period === ap);
+  const last = series[apIdx];
+  const prev = series[apIdx-1] || null;
+
+  // Pour les KPIs réseau on prend la même période active
+  const netAgg = agg(allData.filter(r => r.period.startsWith(ap)));
+
   const fluxVals = series.map(s => s.flux).filter(Boolean);
   const fc = forecastSARIMA(fluxVals);
   const [fy, fm] = (periods[periods.length-1]||"2026-01").split("-").map(Number);
@@ -220,6 +228,7 @@ function DashboardPage() {
     if(nm>12){nm-=12;ny++;}
     return { period:`${ny}-${String(nm).padStart(2,"0")}`, flux };
   });
+
   const delta = (a,b) => (!a||!b) ? null : ((a-b)/Math.abs(b)*100);
   const badge = (d) => d==null ? null : (
     <span style={{ fontSize:11, fontWeight:600, padding:"2px 6px", borderRadius:20, background:d>=0?"#d1fae5":"#fee2e2", color:d>=0?"#065f46":"#991b1b" }}>
@@ -238,43 +247,102 @@ function DashboardPage() {
     </div>
   );
 
+  const handleDelete = async (period) => {
+    if (!confirm(`Supprimer toutes les données de ${period} ?`)) return;
+    const ids = storeRows.filter(r => r.period.startsWith(period)).map(r => r.id);
+    if (ids.length) {
+      await supabase.from("retail_monthly_data").delete().in("id", ids);
+      await loadData();
+    }
+  };
+
+  // Historique groupé par année
+  const reversed = series.slice().reverse();
+  const histRows = [];
+  let currentYear = null;
+  reversed.forEach((s, i) => {
+    const year = s.period.substring(0,4);
+    if (year !== currentYear) {
+      currentYear = year;
+      histRows.push({ type:"year", year });
+    }
+    histRows.push({ type:"row", s, i });
+  });
+
   return (
     <div style={{ maxWidth:1100, margin:"0 auto", padding:"32px 24px" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
-        <h2 style={{ fontSize:20, fontWeight:700, color:"#111827" }}>{selected==="__all__"?"Réseau complet":selected}</h2>
-        <select value={selected} onChange={e=>setSelected(e.target.value)} style={{ ...S.input, width:"auto", minWidth:220 }}>
-          <option value="__all__">— Réseau global —</option>
-          {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-        </select>
+
+      {/* Barre de contrôles */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28, flexWrap:"wrap" }}>
+        <h2 style={{ fontSize:20, fontWeight:700, color:"#111827", flex:1 }}>
+          {selected==="__all__"?"Réseau complet":selected}
+        </h2>
+        <div>
+          <label style={{ ...S.label, marginBottom:4 }}>Période affichée</label>
+          <select value={ap} onChange={e=>setActivePeriod(e.target.value)} style={{ ...S.input, width:"auto", minWidth:140 }}>
+            {periods.slice().reverse().map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ ...S.label, marginBottom:4 }}>Magasin</label>
+          <select value={selected} onChange={e=>setSelected(e.target.value)} style={{ ...S.input, width:"auto", minWidth:220 }}>
+            <option value="__all__">— Réseau global —</option>
+            {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
+        </div>
       </div>
 
+      {/* KPI cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:14, marginBottom:32 }}>
-        <KPI label="Flux"               value={fmt(last?.flux)}    sub={`Réseau : ${fmt(net?.flux)}`}    d={delta(last?.flux, prev?.flux)} />
-        <KPI label="Taux transformation" value={fmtPct(last?.tt)}  sub={`Réseau : ${fmtPct(net?.tt)}`}  d={delta(last?.tt,   prev?.tt)}   />
-        <KPI label="Panier moyen HT"    value={fmtEur(last?.pm)}   sub={`Réseau : ${fmtEur(net?.pm)}`}  d={delta(last?.pm,   prev?.pm)}   />
-        <KPI label="CA HT"              value={fmtEur(last?.ca)}   sub={`Réseau : ${fmtEur(net?.ca)}`}  d={delta(last?.ca,   prev?.ca)}   />
+        <KPI label="Flux"                value={fmt(last?.flux)}    sub={`Réseau : ${fmt(netAgg?.flux)}`}    d={delta(last?.flux, prev?.flux)} />
+        <KPI label="Taux transformation"  value={fmtPct(last?.tt)}  sub={`Réseau : ${fmtPct(netAgg?.tt)}`}  d={delta(last?.tt,   prev?.tt)}   />
+        <KPI label="Panier moyen HT"      value={fmtEur(last?.pm)}  sub={`Réseau : ${fmtEur(netAgg?.pm)}`}  d={delta(last?.pm,   prev?.pm)}   />
+        <KPI label="CA HT"                value={fmtEur(last?.ca)}  sub={`Réseau : ${fmtEur(netAgg?.ca)}`}  d={delta(last?.ca,   prev?.ca)}   />
       </div>
 
+      {/* Historique groupé par année */}
       <div style={{ ...S.card, padding:0, overflow:"hidden", marginBottom:28 }}>
         <div style={{ padding:"14px 20px", borderBottom:"1px solid #f3f4f6", fontWeight:600, fontSize:14, color:"#374151" }}>Historique mensuel</div>
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead><tr style={{ background:"#f9fafb" }}>{["Période","Flux","TT %","PM HT €","CA HT €"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <thead>
+              <tr style={{ background:"#f9fafb" }}>
+                {["Période","Flux","TT %","PM HT €","CA HT €",""].map(h=><th key={h} style={S.th}>{h}</th>)}
+              </tr>
+            </thead>
             <tbody>
-              {series.slice().reverse().map((s,i)=>(
-                <tr key={s.period} style={{ borderTop:"1px solid #f3f4f6", background:i%2?"#fafafa":"#fff" }}>
-                  <td style={{ ...S.td, fontWeight:600 }}>{s.period}</td>
-                  <td style={{ ...S.td, textAlign:"right" }}>{fmt(s.flux)}</td>
-                  <td style={{ ...S.td, textAlign:"right" }}>{fmtPct(s.tt)}</td>
-                  <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.pm)}</td>
-                  <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.ca)}</td>
-                </tr>
-              ))}
+              {histRows.map((item, i) => {
+                if (item.type === "year") return (
+                  <tr key={`year-${item.year}`}>
+                    <td colSpan={6} style={{ padding:"8px 16px 4px", fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:".08em", background:"#f9fafb", borderTop:"2px solid #e5e7eb" }}>
+                      {item.year}
+                    </td>
+                  </tr>
+                );
+                const { s } = item;
+                const isActive = s.period === ap;
+                return (
+                  <tr key={s.period} style={{ borderTop:"1px solid #f3f4f6", background: isActive ? "#eef2ff" : i%2?"#fafafa":"#fff" }}>
+                    <td style={{ ...S.td, fontWeight: isActive ? 700 : 600, color: isActive ? "#4f46e5" : "#374151" }}>{s.period}</td>
+                    <td style={{ ...S.td, textAlign:"right" }}>{fmt(s.flux)}</td>
+                    <td style={{ ...S.td, textAlign:"right" }}>{fmtPct(s.tt)}</td>
+                    <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.pm)}</td>
+                    <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.ca)}</td>
+                    <td style={{ ...S.td, textAlign:"center" }}>
+                      <button onClick={() => handleDelete(s.period)}
+                        style={{ background:"none", border:"1px solid #fca5a5", borderRadius:6, color:"#dc2626", fontSize:11, padding:"2px 8px", cursor:"pointer" }}>
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* Prévisionnel */}
       {fcPeriods.length > 0 && (
         <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
           <div style={{ padding:"14px 20px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
