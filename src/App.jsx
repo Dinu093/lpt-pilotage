@@ -175,19 +175,32 @@ function UploadPage({ onDone }) {
 }
 
 function DashboardPage() {
-  const [allData, setAllData]       = useState([]);
-  const [stores, setStores]         = useState([]);
-  const [periods, setPeriods]       = useState([]);
-  const [selected, setSelected]     = useState("__all__");
+  const [allData, setAllData]           = useState([]);
+  const [stores, setStores]             = useState([]);
+  const [periods, setPeriods]           = useState([]);
+  const [selected, setSelected]         = useState("__all__");
   const [activePeriod, setActivePeriod] = useState(null);
-  const [loading, setLoading]       = useState(true);
+  const [collapsed, setCollapsed]       = useState({});
+  const [loading, setLoading]           = useState(true);
 
   const loadData = async () => {
     const { data: s } = await supabase.from("retail_stores").select("*").order("name");
-    const { data: m } = await supabase.from("retail_monthly_data").select("*, retail_stores(name,placement)").order("period");
+    // Pagination pour dépasser la limite de 1000 lignes
+    let all = [], from = 0, batchSize = 500;
+    while (true) {
+      const { data: m } = await supabase
+        .from("retail_monthly_data")
+        .select("*, retail_stores(name,placement)")
+        .order("period")
+        .range(from, from + batchSize - 1);
+      if (!m || m.length === 0) break;
+      all = [...all, ...m];
+      if (m.length < batchSize) break;
+      from += batchSize;
+    }
     setStores(s || []);
-    setAllData(m || []);
-    const ps = [...new Set((m||[]).map(r => r.period.substring(0,7)))].sort();
+    setAllData(all);
+    const ps = [...new Set(all.map(r => r.period.substring(0,7)))].sort();
     setPeriods(ps);
     setActivePeriod(prev => prev || ps[ps.length-1] || null);
     setLoading(false);
@@ -216,8 +229,6 @@ function DashboardPage() {
   const apIdx = series.findIndex(s => s.period === ap);
   const last = series[apIdx];
   const prev = series[apIdx-1] || null;
-
-  // Pour les KPIs réseau on prend la même période active
   const netAgg = agg(allData.filter(r => r.period.startsWith(ap)));
 
   const fluxVals = series.map(s => s.flux).filter(Boolean);
@@ -256,6 +267,8 @@ function DashboardPage() {
     }
   };
 
+  const toggleYear = (year) => setCollapsed(prev => ({ ...prev, [year]: !prev[year] }));
+
   // Historique groupé par année
   const reversed = series.slice().reverse();
   const histRows = [];
@@ -266,25 +279,25 @@ function DashboardPage() {
       currentYear = year;
       histRows.push({ type:"year", year });
     }
-    histRows.push({ type:"row", s, i });
+    histRows.push({ type:"row", s, i, year });
   });
 
   return (
     <div style={{ maxWidth:1100, margin:"0 auto", padding:"32px 24px" }}>
 
       {/* Barre de contrôles */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28, flexWrap:"wrap" }}>
-        <h2 style={{ fontSize:20, fontWeight:700, color:"#111827", flex:1 }}>
+      <div style={{ display:"flex", alignItems:"flex-end", gap:12, marginBottom:28, flexWrap:"wrap" }}>
+        <h2 style={{ fontSize:20, fontWeight:700, color:"#111827", flex:1, marginBottom:0 }}>
           {selected==="__all__"?"Réseau complet":selected}
         </h2>
         <div>
-          <label style={{ ...S.label, marginBottom:4 }}>Période affichée</label>
+          <label style={S.label}>Période affichée</label>
           <select value={ap} onChange={e=>setActivePeriod(e.target.value)} style={{ ...S.input, width:"auto", minWidth:140 }}>
             {periods.slice().reverse().map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ ...S.label, marginBottom:4 }}>Magasin</label>
+          <label style={S.label}>Magasin</label>
           <select value={selected} onChange={e=>setSelected(e.target.value)} style={{ ...S.input, width:"auto", minWidth:220 }}>
             <option value="__all__">— Réseau global —</option>
             {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
@@ -300,9 +313,11 @@ function DashboardPage() {
         <KPI label="CA HT"                value={fmtEur(last?.ca)}  sub={`Réseau : ${fmtEur(netAgg?.ca)}`}  d={delta(last?.ca,   prev?.ca)}   />
       </div>
 
-      {/* Historique groupé par année */}
+      {/* Historique groupé par année collapsible */}
       <div style={{ ...S.card, padding:0, overflow:"hidden", marginBottom:28 }}>
-        <div style={{ padding:"14px 20px", borderBottom:"1px solid #f3f4f6", fontWeight:600, fontSize:14, color:"#374151" }}>Historique mensuel</div>
+        <div style={{ padding:"14px 20px", borderBottom:"1px solid #f3f4f6", fontWeight:600, fontSize:14, color:"#374151" }}>
+          Historique mensuel
+        </div>
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
             <thead>
@@ -311,24 +326,31 @@ function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {histRows.map((item, i) => {
-                if (item.type === "year") return (
-                  <tr key={`year-${item.year}`}>
-                    <td colSpan={6} style={{ padding:"8px 16px 4px", fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:".08em", background:"#f9fafb", borderTop:"2px solid #e5e7eb" }}>
-                      {item.year}
-                    </td>
-                  </tr>
-                );
+              {histRows.map((item) => {
+                if (item.type === "year") {
+                  const isOpen = !collapsed[item.year];
+                  return (
+                    <tr key={`year-${item.year}`} onClick={() => toggleYear(item.year)}
+                      style={{ cursor:"pointer", userSelect:"none" }}>
+                      <td colSpan={6} style={{ padding:"8px 16px", fontSize:12, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:".08em", background:"#f3f4f6", borderTop:"2px solid #e5e7eb" }}>
+                        <span style={{ marginRight:8 }}>{isOpen ? "▾" : "▸"}</span>
+                        {item.year}
+                      </td>
+                    </tr>
+                  );
+                }
+                if (collapsed[item.year]) return null;
                 const { s } = item;
                 const isActive = s.period === ap;
                 return (
-                  <tr key={s.period} style={{ borderTop:"1px solid #f3f4f6", background: isActive ? "#eef2ff" : i%2?"#fafafa":"#fff" }}>
+                  <tr key={s.period} style={{ borderTop:"1px solid #f3f4f6", background: isActive ? "#eef2ff" : "#fff", cursor:"pointer" }}
+                    onClick={() => setActivePeriod(s.period)}>
                     <td style={{ ...S.td, fontWeight: isActive ? 700 : 600, color: isActive ? "#4f46e5" : "#374151" }}>{s.period}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmt(s.flux)}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmtPct(s.tt)}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.pm)}</td>
                     <td style={{ ...S.td, textAlign:"right" }}>{fmtEur(s.ca)}</td>
-                    <td style={{ ...S.td, textAlign:"center" }}>
+                    <td style={{ ...S.td, textAlign:"center" }} onClick={e => e.stopPropagation()}>
                       <button onClick={() => handleDelete(s.period)}
                         style={{ background:"none", border:"1px solid #fca5a5", borderRadius:6, color:"#dc2626", fontSize:11, padding:"2px 8px", cursor:"pointer" }}>
                         ✕
