@@ -159,7 +159,7 @@ export default function ForecastPage() {
 
   // Modèles
   const ttModel = fitTTModel(series);
-  const pmModel = fitPMModel(series);
+  const pmModel = fitPMModel(series.filter(s => s.period >= "2023-08"));
 
   // Prévision flux SARIMA
   const fluxVals = series.map(s=>s.flux).filter(Boolean);
