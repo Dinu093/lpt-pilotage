@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Retrait — Lunettes Pour Tous</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Schibsted+Grotesk:wght@400;500;700&display=swap');
+  :root{ --ink:#16150F; --paper:#FBFAF6; --line:#E7E3D8; --soft:#F1EEE4; --accent:#FFC400; --muted:#56523F; --green:#10B981; --amber:#F59E0B; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; margin:0; }
+  body{ font-family:'Schibsted Grotesk',system-ui,sans-serif; background:var(--paper); color:var(--ink); min-height:100vh; }
+  .wrap{ max-width:470px; margin:0 auto; padding:30px 20px 60px; animation:in .3s ease; }
+  @keyframes in{ from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+  h1{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:32px; line-height:1.06; margin:0 0 8px; }
+  .sub{ color:var(--muted); font-size:20px; line-height:1.45; margin:0 0 22px; }
+  .eyebrow{ display:inline-flex; gap:6px; font-size:13px; font-weight:700; color:#6B6655; text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+  .choice{ width:100%; display:flex; align-items:center; gap:14px; text-align:left; margin-bottom:12px; border:1.5px solid var(--line); background:#fff; color:var(--ink); border-radius:16px; padding:20px 18px; font-size:18px; font-weight:700; cursor:pointer; }
+  .choice.feat{ border:2px solid var(--accent); background:#FFFBEC; }
+  .choice .ic{ display:grid; place-items:center; width:42px; height:42px; border-radius:11px; background:#F3F0E7; font-size:22px; }
+  .choice.feat .ic{ background:var(--accent); }
+  .choice .ar{ margin-left:auto; opacity:.4; }
+  .soft{ width:100%; text-align:left; border:1.5px solid var(--line); background:var(--soft); color:var(--ink); border-radius:16px; padding:20px; font-size:19px; font-weight:700; margin-bottom:12px; cursor:pointer; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:flex; gap:8px; align-items:baseline; margin-bottom:6px; }
+  .field label b{ font-weight:700; font-size:15px; }
+  .field label span{ font-size:12px; color:#9A957F; }
+  .field input{ width:100%; border:1px solid var(--line); border-radius:12px; padding:15px 16px; font-size:17px; outline:none; background:#fff; color:var(--ink); font-family:inherit; }
+  .pcount{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:22px; }
+  .pcount button{ border:1.5px solid var(--line); background:#fff; color:var(--ink); border-radius:14px; padding:16px 6px; font-weight:700; font-size:14px; cursor:pointer; }
+  .pcount button.on{ border-color:var(--ink); background:var(--ink); color:var(--accent); }
+  .cta{ width:100%; border:none; border-radius:14px; padding:18px; font-size:17px; font-weight:800; background:var(--ink); color:var(--accent); display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; }
+  .cta:disabled{ background:#E7E3D8; color:#A7A292; cursor:default; }
+  .ghost{ border:1px solid var(--line); background:#fff; border-radius:12px; padding:14px 24px; font-weight:700; font-size:16px; color:var(--ink); cursor:pointer; }
+  .back{ border:none; background:transparent; color:var(--muted); font-weight:600; font-size:14px; padding:0; margin-bottom:14px; cursor:pointer; }
+  .center{ text-align:center; }
+  .disc{ width:82px; height:82px; border-radius:50%; margin:0 auto 20px; display:grid; place-items:center; box-shadow:0 10px 28px rgba(0,0,0,.18); font-size:38px; }
+  .warn{ background:#FFF4E5; border:1.5px solid var(--amber); border-radius:14px; padding:16px 18px; margin:4px 0 22px; text-align:left; display:flex; gap:12px; }
+  .warn .t{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:18px; color:#7A4A00; margin-bottom:4px; }
+  .warn p{ color:#7A4A00; font-size:15px; line-height:1.5; }
+  .stars{ display:flex; justify-content:center; gap:6px; margin:4px 0 24px; }
+  .stars span{ font-size:42px; cursor:pointer; color:#D8D3C4; line-height:1; }
+  .stars span.on{ color:var(--accent); }
+  textarea{ width:100%; border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:16px; outline:none; background:#fff; color:var(--ink); resize:none; font-family:inherit; margin-bottom:16px; }
+  .skip{ border:none; background:transparent; color:var(--muted); font-weight:600; font-size:15px; margin-top:14px; cursor:pointer; }
+  .msgbody{ font-size:22px; line-height:1.5; font-weight:500; margin:0 0 28px; }
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<script>
+const SUPABASE_URL = "https://svrmgurokzxlaxditxpg.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2cm1ndXJva3p4bGF4ZGl0eHBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MzUzMTMsImV4cCI6MjA5MDAxMTMxM30.s4HcUeau23rHV_zrhslTOdKN6jfLrRfHrnRZ9kokHJI";
+const STORE_ID = new URLSearchParams(location.search).get("store") || "b2c79307-9554-43a3-b7ad-d992e796020b";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const app = document.getElementById("app");
+
+let rec = null, stars = 0, paires = 1, sub = null;
+const cap = s => s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m,a,b)=>a+b.toUpperCase());
+const esc = s => (s||"").replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function go(step){ render(step); window.scrollTo(0,0); }
+
+function render(step){
+  if(step==="accueil"){
+    app.innerHTML = `
+      <div class="eyebrow">◉ Magasin Châtelet</div>
+      <h1>Bonjour</h1><p class="sub">Que pouvons-nous faire pour vous&nbsp;?</p>
+      <button class="choice feat" data-go="jour"><span class="ic">▣</span><span style="flex:1">Je viens récupérer mes lunettes</span><span class="ar">→</span></button>
+      <button class="choice" data-go="achat"><span class="ic">🛍</span><span style="flex:1">Je viens acheter</span><span class="ar">→</span></button>
+      <button class="choice" data-go="sav"><span class="ic">🔧</span><span style="flex:1">Réglage ou SAV</span><span class="ar">→</span></button>`;
+  }
+  else if(step==="achat") msg("Avec plaisir", "Un Expert Optique en polo bleu va vous accueillir. Dirigez-vous vers lui, il s'occupe de tout.");
+  else if(step==="sav") msg("Très bien", "Rendez-vous à l'espace SAV, au fond du magasin sur votre gauche. Notre équipe vous attend.");
+  else if(step==="jour"){
+    app.innerHTML = `
+      <button class="back" data-go="accueil">‹ Retour</button>
+      <h1 style="margin:4px 0 24px;font-size:30px;line-height:1.12">Vos lunettes ont-elles été commandées aujourd'hui&nbsp;?</h1>
+      <button class="soft" data-go="auj">Oui, aujourd'hui</button>
+      <button class="soft" data-go="form">Non, un autre jour</button>`;
+  }
+  else if(step==="auj") msg("Parfait", "Vos lunettes sont déjà au comptoir. Restez dans la file, nous vous appelons très vite.");
+  else if(step==="form"){
+    app.innerHTML = `
+      <button class="back" data-go="jour">‹ Retour</button>
+      <h1>On prépare vos lunettes</h1><p class="sub" style="font-size:16px">Quelques informations et nous les sortons pendant que vous patientez.</p>
+      <div style="font-weight:700;font-size:16px;margin:8px 0 10px">Combien de paires venez-vous chercher&nbsp;?</div>
+      <div class="pcount">
+        <button data-p="1" class="${paires===1?'on':''}">Une paire</button>
+        <button data-p="2" class="${paires===2?'on':''}">Deux paires</button>
+        <button data-p="3" class="${paires===3?'on':''}">Trois ou plus</button>
+      </div>
+      <div class="field"><label><b>Nom</b><span>comme sur votre SMS</span></label><input id="nom" placeholder="DUPONT" autocomplete="off"></div>
+      <div class="field"><label><b>Prénom</b></label><input id="prenom" placeholder="Jean" autocomplete="off"></div>
+      <div class="field"><label><b>Téléphone</b></label><input id="tel" placeholder="06 12 34 56 78" inputmode="tel"></div>
+      <button id="send" class="cta" disabled>Valider mon arrivée →</button>`;
+    const nom=document.getElementById("nom"), pre=document.getElementById("prenom"), tel=document.getElementById("tel"), send=document.getElementById("send");
+    const check=()=>{ send.disabled = !(nom.value.trim() && pre.value.trim()); };
+    nom.oninput=()=>{ const p=nom.selectionStart; nom.value=nom.value.toUpperCase(); nom.setSelectionRange(p,p); check(); };
+    pre.oninput=()=>{ pre.value=cap(pre.value); check(); };
+    tel.oninput=check;
+    document.querySelectorAll(".pcount button").forEach(b=> b.onclick=()=>{ paires=+b.dataset.p; render("form"); });
+    send.onclick=submit;
+  }
+  else if(step==="confirme"){
+    const st = statusText(rec && rec.status);
+    app.innerHTML = `
+      <div class="center">
+        <div class="disc" style="background:var(--ink)">👓</div>
+        <h1 class="center">Merci ${esc(rec?rec.prenom:"")}</h1>
+        <p class="sub center" id="stxt">${st}</p>
+        <div class="warn"><div style="font-size:24px">⚠</div><div>
+          <div class="t">Ne fermez pas cette page</div>
+          <p>Laissez-la ouverte jusqu'à la remise de vos lunettes.</p></div></div>
+        <button id="pickup" class="ghost" style="border-color:var(--ink);font-weight:800">J'ai récupéré mes lunettes</button>
+      </div>`;
+    document.getElementById("pickup").onclick=async()=>{ await sb.from("retail_pickup_checkins").update({status:"recupere"}).eq("id",rec.id); go("note"); };
+  }
+  else if(step==="note"){
+    app.innerHTML = `
+      <div class="center">
+        <div class="disc" style="background:var(--green);color:#fff">✓</div>
+        <h1 class="center">Merci ${esc(rec?rec.prenom:"")}</h1>
+        <p class="sub center" style="font-size:19px">Comment s'est passé votre retrait&nbsp;?</p>
+        <div class="stars">${[1,2,3,4,5].map(n=>`<span data-n="${n}">★</span>`).join("")}</div>
+        <textarea id="avis" rows="3" placeholder="Un commentaire ? (facultatif)"></textarea>
+        <button id="sendnote" class="cta" disabled>Envoyer mon avis</button>
+        <button id="skip" class="skip">Passer</button>
+      </div>`;
+    const paint=()=>document.querySelectorAll(".stars span").forEach(s=> s.classList.toggle("on", +s.dataset.n<=stars));
+    document.querySelectorAll(".stars span").forEach(s=> s.onclick=()=>{ stars=+s.dataset.n; paint(); document.getElementById("sendnote").disabled=false; });
+    document.getElementById("sendnote").onclick=async()=>{ await sb.from("retail_pickup_checkins").update({note:stars, avis:document.getElementById("avis").value||null}).eq("id",rec.id); go("merci"); };
+    document.getElementById("skip").onclick=()=>go("merci");
+  }
+  else if(step==="merci"){
+    app.innerHTML = `
+      <div class="center">
+        <div class="disc" style="background:var(--green);color:#fff">✓</div>
+        <h1 class="center">Merci et à bientôt</h1>
+        <p class="sub center">Nous espérons que vos nouvelles lunettes vous plaisent.</p>
+        <button class="ghost" data-go="accueil">Fermer</button>
+      </div>`;
+  }
+  document.querySelectorAll("[data-go]").forEach(b=> b.onclick=()=>{ const t=b.dataset.go; if(t==="accueil") reset(); go(t); });
+}
+
+function msg(title, body){
+  app.innerHTML = `<div class="center" style="padding-top:26px">
+    <div class="disc" style="background:var(--accent)">→</div>
+    <h1 class="center">${title}</h1><p class="msgbody">${body}</p>
+    <button class="ghost" data-go="accueil">Retour à l'accueil</button></div>`;
+}
+function statusText(s){
+  return s==="prete" ? "Vos lunettes arrivent au comptoir."
+    : s==="partielle" ? "Une partie de votre commande est prête."
+    : s==="recherche" ? "Nous recherchons votre commande."
+    : s==="introuvable" ? "Nous vérifions votre commande, un instant."
+    : "Votre commande est en attente de préparation.";
+}
+async function submit(){
+  const nom=document.getElementById("nom").value.trim().toUpperCase();
+  const prenom=cap(document.getElementById("prenom").value.trim());
+  const tel=document.getElementById("tel").value.trim();
+  const { data, error } = await sb.from("retail_pickup_checkins")
+    .insert({ store_id:STORE_ID, nom, prenom, telephone:tel||null, paires, found:0, status:"attente" })
+    .select().single();
+  if(error){ alert("Une erreur est survenue, merci de prévenir un vendeur."); return; }
+  rec = data; go("confirme"); listen();
+}
+function listen(){
+  if(sub) sb.removeChannel(sub);
+  sub = sb.channel("me-"+rec.id)
+    .on("postgres_changes", { event:"UPDATE", schema:"public", table:"retail_pickup_checkins", filter:"id=eq."+rec.id },
+      payload=>{ rec=payload.new; const el=document.getElementById("stxt"); if(el) el.textContent=statusText(rec.status); })
+    .subscribe();
+}
+function reset(){ rec=null; stars=0; paires=1; if(sub){ sb.removeChannel(sub); sub=null; } }
+render("accueil");
+</script>
+</body>
+</html>
