@@ -91,21 +91,47 @@ function unlock(){ document.getElementById("gate").style.display="none"; start()
 async function patch(id,obj){ await sb.from("retail_pickup_checkins").update(obj).eq("id",id); load(); }
 function findNext(r){ const nf=(r.found||0)+1; patch(r.id, nf>=r.paires?{found:nf,status:"prete"}:{found:nf,status:"partielle"}); }
 
+// Marquer introuvable. Si la commande a plusieurs paires et qu'au moins une est déjà
+// trouvée, on SCINDE : la (les) paire(s) trouvée(s) restent prêtes, une nouvelle fiche
+// est créée pour la paire manquante et part dans "À vérifier".
+async function markLost(r){
+  const found=r.found||0;
+  if(r.paires>1 && found>=1 && found<r.paires){
+    const manquantes=r.paires-found;
+    // la fiche d'origine conserve les paires trouvées et passe en "prête"
+    await sb.from("retail_pickup_checkins").update({ paires:found, status:"prete" }).eq("id",r.id);
+    // nouvelle fiche pour les paires manquantes, liée au parent, même client/heure
+    await sb.from("retail_pickup_checkins").insert({
+      store_id:STORE_ID, parent_id:r.parent_id||r.id,
+      nom:r.nom, prenom:r.prenom, telephone:r.telephone,
+      paires:manquantes, found:0, status:"introuvable", arrivee_at:r.arrivee_at
+    });
+  } else {
+    await sb.from("retail_pickup_checkins").update({ status:"introuvable" }).eq("id",r.id);
+  }
+  load();
+}
+
 async function load(){
   const { data }=await sb.from("retail_pickup_checkins").select("*").eq("store_id",STORE_ID)
     .not("status","in","(recupere,archive)").order("arrivee_at",{ascending:true});
   rows=data||[]; render();
 }
 function render(){
-  const prep=rows.filter(r=>["attente","recherche","introuvable"].includes(r.status));
+  const prep=rows.filter(r=>["attente","recherche"].includes(r.status));
   const pret=rows.filter(r=>["partielle","prete"].includes(r.status))
     .sort((a,b)=> a.status===b.status ? new Date(a.arrivee_at)-new Date(b.arrivee_at) : a.status==="partielle"?-1:1);
+  const lost=rows.filter(r=>r.status==="introuvable");
   let html="";
-  if(!prep.length && !pret.length){ board.innerHTML=`<div class="empty">👓 Aucune commande à préparer.</div>`; return; }
+  if(!prep.length && !pret.length && !lost.length){ board.innerHTML=`<div class="empty">👓 Aucune commande à préparer.</div>`; return; }
   html+=`<div class="grid">`+prep.map(card).join("")+`</div>`;
   if(pret.length){
-    html+=`<div class="sech"><b>Prêtes à être envoyées</b><span class="leg"><span class="dot"></span>orange = au moins une dispo</span><span class="ln"></span></div>`;
+    html+=`<div class="sech"><b>Prêtes / envoyées au comptoir</b><span class="leg"><span class="dot"></span>orange = au moins une dispo</span><span class="ln"></span></div>`;
     html+=`<div class="chips">`+pret.map(chip).join("")+`</div>`;
+  }
+  if(lost.length){
+    html+=`<div class="sech" style="margin-top:34px"><b style="color:var(--red)">⚠ \u00c0 v\u00e9rifier · ${lost.length}</b><span class="ln"></span></div>`;
+    html+=`<div class="grid">`+lost.map(card).join("")+`</div>`;
   }
   board.innerHTML=html;
   bind();
@@ -120,7 +146,7 @@ function card(r){
   if(r.status==="attente") acts=`<button class="btn" style="background:${COL.recherche}" data-a="rech" data-id="${r.id}">Je cherche</button>`;
   if(r.status==="recherche") acts=`<button class="btn" style="background:${found+1>=r.paires?COL.prete:COL.recherche}" data-a="find" data-id="${r.id}">${nextLbl}</button>`;
   if(lost) acts=`<button class="btn" style="background:${COL.recherche}" data-a="rech" data-id="${r.id}">Reprendre</button>`+
-                `<button class="btn" style="background:${found+1>=r.paires?COL.prete:COL.recherche}" data-a="find" data-id="${r.id}">${nextLbl}</button>`;
+                `<button class="btn" style="background:${COL.prete}" data-a="ready" data-id="${r.id}">Trouvée, prête</button>`;
   if(!lost) acts+=`<button class="btn ghost" data-a="lost" data-id="${r.id}">Introuvable</button>`;
   return `<div class="card ${urg?'urgent':''}">
     <div class="row1"><div class="badge" style="background:${lost?COL.introuvable:'var(--accent)'};color:${lost?'#fff':'#16150F'}">${esc(r.nom?r.nom[0]:'?')}</div>
@@ -147,6 +173,7 @@ function bind(){
     b.onclick=()=>{ const a=b.dataset.a;
       if(a==="rech") patch(r.id,{status:"recherche"});
       else if(a==="find") findNext(r);
+      else if(a==="ready") patch(r.id,{status:"prete", found:r.paires});
       else if(a==="lost") openLost(r);
     };
   });
@@ -165,7 +192,7 @@ function openLost(r){
       <button id="mok" style="border:none;background:var(--red);color:#fff">Confirmer introuvable</button>
     </div></div></div>`;
   document.getElementById("mcancel").onclick=()=>host.innerHTML="";
-  document.getElementById("mok").onclick=()=>{ patch(r.id,{status:"introuvable"}); host.innerHTML=""; };
+  document.getElementById("mok").onclick=()=>{ markLost(r); host.innerHTML=""; };
 }
 function start(){
   sb.channel("ipad-"+STORE_ID).on("postgres_changes",{event:"*",schema:"public",table:"retail_pickup_checkins",filter:"store_id=eq."+STORE_ID}, load).subscribe();
