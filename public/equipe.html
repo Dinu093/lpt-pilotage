@@ -145,8 +145,7 @@ function card(r){
   let acts="";
   if(r.status==="attente") acts=`<button class="btn" style="background:${COL.recherche}" data-a="rech" data-id="${r.id}">Je cherche</button>`;
   if(r.status==="recherche") acts=`<button class="btn" style="background:${found+1>=r.paires?COL.prete:COL.recherche}" data-a="find" data-id="${r.id}">${nextLbl}</button>`;
-  if(lost) acts=`<button class="btn" style="background:${COL.recherche}" data-a="rech" data-id="${r.id}">Reprendre</button>`+
-                `<button class="btn" style="background:${COL.prete}" data-a="ready" data-id="${r.id}">Trouvée, prête</button>`;
+  if(lost) acts=`<span style="color:rgba(255,255,255,.4);font-size:13px;font-style:italic">Verrouillée — contacter le responsable</span>`;
   if(!lost) acts+=`<button class="btn ghost" data-a="lost" data-id="${r.id}">Introuvable</button>`;
   return `<div class="card ${urg?'urgent':''}">
     <div class="row1"><div class="badge" style="background:${lost?COL.introuvable:'var(--accent)'};color:${lost?'#fff':'#16150F'}">${esc(r.nom?r.nom[0]:'?')}</div>
