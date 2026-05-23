@@ -88,23 +88,28 @@ async function load(){
   rows=data||[]; render();
 }
 function render(){
-  const prep=rows.filter(r=>["attente","recherche","introuvable"].includes(r.status));
+  const prep=rows.filter(r=>["attente","recherche"].includes(r.status));
   const pret=rows.filter(r=>["partielle","prete"].includes(r.status))
     .sort((a,b)=> a.status===b.status ? new Date(a.arrivee_at)-new Date(b.arrivee_at) : a.status==="partielle"?-1:1);
+  const lost=rows.filter(r=>r.status==="introuvable");
   document.getElementById("nprep").textContent=prep.length;
   document.getElementById("npret").textContent=pret.length;
 
-  // son si nouvelle arrivée
+  // son si nouvelle arrivée (zone à chercher uniquement)
   const ids=new Set(prep.map(r=>r.id));
   if(known===null){ known=ids; }
   else { let isNew=false; ids.forEach(id=>{ if(!known.has(id)) isNew=true; }); known=ids; if(isNew){ if(soundOn) chime(); window.scrollTo({top:0,behavior:"smooth"}); } }
 
   let html="";
-  if(!prep.length && !pret.length){ board.innerHTML=`<div class="empty">👓 Aucune commande à préparer.</div>`; return; }
+  if(!prep.length && !pret.length && !lost.length){ board.innerHTML=`<div class="empty">👓 Aucune commande à préparer.</div>`; return; }
   html += `<div class="grid">`+prep.map(card).join("")+`</div>`;
   if(pret.length){
-    html += `<div class="sech"><b>Prêtes à être envoyées</b><span class="leg"><span class="dot"></span>orange = au moins une dispo</span><span class="ln"></span></div>`;
+    html += `<div class="sech"><b>Prêtes / envoyées au comptoir</b><span class="leg"><span class="dot"></span>orange = au moins une dispo</span><span class="ln"></span></div>`;
     html += `<div class="chips">`+pret.map(chip).join("")+`</div>`;
+  }
+  if(lost.length){
+    html += `<div class="sech" style="margin-top:34px"><b style="color:var(--red)">⚠ À vérifier · ${lost.length}</b><span class="ln"></span></div>`;
+    html += `<div class="chips">`+lost.map(lostChip).join("")+`</div>`;
   }
   board.innerHTML=html;
 }
@@ -127,6 +132,12 @@ function chip(r){
   return `<div class="chip" style="background:${col}1A;border:1px solid ${col}66">
     <span class="cb" style="background:${col}">${esc(r.nom?r.nom[0]:'?')}</span>
     <span><span class="cn">${esc(r.nom)}</span><span class="cp">${esc(r.prenom)}</span></span>${extra}</div>`;
+}
+function lostChip(r){
+  const col=COL.introuvable;
+  return `<div class="chip" style="background:${col}1A;border:1px solid ${col}66">
+    <span class="cb" style="background:${col}">⚠</span>
+    <span><span class="cn">${esc(r.nom)}</span><span class="cp">${esc(r.prenom)}</span></span></div>`;
 }
 // défilement auto si débordement
 setInterval(()=>{ const max=document.documentElement.scrollHeight-window.innerHeight; if(max<40) return;
