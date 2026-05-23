@@ -125,7 +125,7 @@ function render(step){
           <p>Laissez-la ouverte jusqu'à la remise de vos lunettes.</p></div></div>
         <button id="pickup" class="ghost" style="border-color:var(--ink);font-weight:800">J'ai récupéré mes lunettes</button>
       </div>`;
-    document.getElementById("pickup").onclick=async()=>{ await sb.from("retail_pickup_checkins").update({status:"recupere"}).eq("id",rec.id); go("note"); };
+    document.getElementById("pickup").onclick=async(e)=>{ e.target.disabled=true; await sb.from("retail_pickup_checkins").update({status:"recupere"}).eq("id",rec.id); go("note"); };
   }
   else if(step==="note"){
     app.innerHTML = `
@@ -168,24 +168,32 @@ function statusText(s){
     : s==="introuvable" ? "Nous vérifions votre commande, un instant."
     : "Votre commande est en attente de préparation.";
 }
+let submitting = false;
 async function submit(){
-  const nom=document.getElementById("nom").value.trim().toUpperCase();
-  const prenom=cap(document.getElementById("prenom").value.trim());
-  const tel=document.getElementById("tel").value.trim();
-  const telDigits=(tel.match(/\d/g)||[]).join("");
-  // anti-doublon : commande active aujourd'hui avec le même numéro
-  const since=new Date(); since.setHours(0,0,0,0);
-  const { data: existing } = await sb.from("retail_pickup_checkins").select("*")
-    .eq("store_id",STORE_ID).eq("telephone",tel)
-    .not("status","in","(recupere,archive)")
-    .gte("arrivee_at",since.toISOString())
-    .order("arrivee_at",{ascending:false}).limit(1);
-  if(existing && existing.length){ rec=existing[0]; go("doublon"); listen(); return; }
-  const { data, error } = await sb.from("retail_pickup_checkins")
-    .insert({ store_id:STORE_ID, nom, prenom, telephone:tel, paires, found:0, status:"attente" })
-    .select().single();
-  if(error){ alert("Une erreur est survenue, merci de prévenir un vendeur."); return; }
-  rec = data; go("confirme"); listen();
+  if(submitting) return;            // anti double-clic
+  submitting = true;
+  const send=document.getElementById("send");
+  if(send){ send.disabled=true; send.textContent="Validation…"; }
+  try {
+    const nom=document.getElementById("nom").value.trim().toUpperCase();
+    const prenom=cap(document.getElementById("prenom").value.trim());
+    const tel=document.getElementById("tel").value.trim();
+    // anti-doublon : commande active aujourd'hui avec le même numéro
+    const since=new Date(); since.setHours(0,0,0,0);
+    const { data: existing } = await sb.from("retail_pickup_checkins").select("*")
+      .eq("store_id",STORE_ID).eq("telephone",tel)
+      .not("status","in","(recupere,archive)")
+      .gte("arrivee_at",since.toISOString())
+      .order("arrivee_at",{ascending:false}).limit(1);
+    if(existing && existing.length){ rec=existing[0]; go("doublon"); listen(); return; }
+    const { data, error } = await sb.from("retail_pickup_checkins")
+      .insert({ store_id:STORE_ID, nom, prenom, telephone:tel, paires, found:0, status:"attente" })
+      .select().single();
+    if(error){ alert("Une erreur est survenue, merci de prévenir un vendeur."); return; }
+    rec = data; go("confirme"); listen();
+  } finally {
+    submitting = false;
+  }
 }
 function listen(){
   if(sub) sb.removeChannel(sub);
