@@ -2,118 +2,88 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>Retraits — Pilotage iPad</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Retraits — Écran -1</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Schibsted+Grotesk:wght@400;500;700&display=swap');
-  :root{ --accent:#FFC400; --amber:#F59E0B; --blue:#3B82F6; --green:#10B981; --orange:#F97316; --red:#EF4444; --paper:#FBFAF6; --ink:#16150F; --line:#E7E3D8; }
-  *{ box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
+  :root{ --accent:#FFC400; --amber:#F59E0B; --blue:#3B82F6; --green:#10B981; --orange:#F97316; --red:#EF4444; }
+  *{ box-sizing:border-box; margin:0; }
   body{ font-family:'Schibsted Grotesk',system-ui,sans-serif; background:linear-gradient(160deg,#0C0C10,#15140C); color:#FBFAF6; min-height:100vh; }
-  .top{ display:flex; align-items:center; gap:16px; padding:16px 22px; flex-wrap:wrap; border-bottom:1px solid rgba(255,255,255,.08); }
-  h1{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:clamp(22px,3.5vw,34px); margin:0; }
+  .top{ position:sticky; top:0; z-index:5; background:rgba(11,11,15,.9); backdrop-filter:blur(8px); display:flex; align-items:center; gap:16px; padding:16px 22px; flex-wrap:wrap; border-bottom:1px solid rgba(255,255,255,.08); }
+  h1{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:clamp(24px,4vw,40px); margin:0; }
   .accent{ color:var(--accent); }
-  .hint{ color:rgba(255,255,255,.45); font-size:13px; margin:14px 22px 0; }
-  .body{ padding:14px 18px 70px; max-width:1500px; margin:0 auto; }
-  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(330px,1fr)); gap:12px; }
-  .card{ border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:12px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); }
-  .card.urgent{ border-color:rgba(239,68,68,.5); }
+  .stats{ margin-left:auto; display:flex; align-items:center; gap:18px; }
+  .stat b{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:22px; }
+  .stat small{ color:rgba(255,255,255,.5); font-size:13px; }
+  .clock{ font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:22px; color:rgba(255,255,255,.85); }
+  .soundbtn{ border:1px solid rgba(255,255,255,.2); background:transparent; color:rgba(255,255,255,.6); border-radius:999px; padding:8px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .soundbtn.on{ background:rgba(255,196,0,.15); color:var(--accent); }
+  .body{ padding:20px 18px 60px; max-width:1500px; margin:0 auto; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:12px; }
+  .card{ border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:12px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); animation:in .25s ease; }
+  .card.urgent{ border-color:rgba(239,68,68,.5); animation:pulse 2s infinite; }
+  @keyframes in{ from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+  @keyframes pulse{ 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)} 50%{box-shadow:0 0 0 5px rgba(239,68,68,.22)} }
   .row1{ display:flex; align-items:center; gap:13px; }
   .badge{ flex-shrink:0; width:50px; height:50px; border-radius:13px; display:grid; place-items:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:27px; color:#16150F; background:var(--accent); }
   .nom{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; line-height:1.02; font-size:clamp(22px,2.2vw,30px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pre{ color:rgba(255,255,255,.6); font-size:15px; margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .pairs{ display:inline-flex; gap:4px; background:#fff; color:#16150F; border-radius:8px; padding:4px 10px; font-weight:800; font-size:14px; }
+  .pairs{ display:inline-flex; align-items:center; gap:4px; background:#fff; color:#16150F; border-radius:8px; padding:4px 10px; font-weight:800; font-size:14px; }
   .pairs1{ font-size:12px; color:rgba(255,255,255,.4); }
   .row2{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
   .pill{ display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 11px; font-weight:700; font-size:12.5px; }
   .prog{ background:rgba(255,196,0,.15); color:var(--accent); border-radius:999px; padding:5px 10px; font-weight:800; font-size:12.5px; }
-  .min{ color:rgba(255,255,255,.45); font-size:13px; } .min.urg{ color:var(--red); font-weight:700; }
-  .acts{ display:flex; gap:8px; flex-wrap:wrap; }
-  .btn{ border:none; border-radius:10px; padding:11px 16px; font-weight:700; font-size:14px; color:#fff; cursor:pointer; font-family:inherit; }
-  .btn.ghost{ background:transparent; border:1px solid rgba(255,255,255,.2); color:rgba(255,255,255,.7); }
+  .min{ color:rgba(255,255,255,.45); font-size:13px; }
+  .min.urg{ color:var(--red); font-weight:700; }
   .sech{ display:flex; align-items:center; gap:10px; margin:30px 0 14px; }
   .sech b{ color:var(--green); text-transform:uppercase; letter-spacing:.07em; font-size:13px; }
   .sech .leg{ display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--orange); font-weight:700; }
-  .sech .dot{ width:8px; height:8px; border-radius:50%; background:var(--orange); } .sech .ln{ flex:1; height:1px; background:rgba(255,255,255,.08); }
+  .sech .dot{ width:8px; height:8px; border-radius:50%; background:var(--orange); }
+  .sech .ln{ flex:1; height:1px; background:rgba(255,255,255,.08); }
   .chips{ display:flex; flex-wrap:wrap; gap:10px; }
-  .chip{ display:inline-flex; align-items:center; gap:11px; border-radius:12px; padding:9px 13px; flex-wrap:wrap; }
+  .chip{ display:inline-flex; align-items:center; gap:11px; border-radius:12px; padding:9px 13px; }
   .chip .cb{ width:36px; height:36px; border-radius:9px; color:#fff; display:grid; place-items:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:19px; }
-  .chip .cn{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:19px; } .chip .cp{ color:rgba(255,255,255,.55); font-size:14px; margin-left:8px; }
+  .chip .cn{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:19px; }
+  .chip .cp{ color:rgba(255,255,255,.55); font-size:14px; margin-left:8px; }
   .empty{ text-align:center; padding:80px 0; color:rgba(255,255,255,.4); font-size:18px; }
-  .gate{ position:fixed; inset:0; background:#0C0C10; display:grid; place-items:center; z-index:20; }
-  .gate .box{ text-align:center; padding:30px; }
-  .gate input{ font-size:28px; letter-spacing:8px; text-align:center; width:200px; padding:14px; border-radius:14px; border:1px solid rgba(255,255,255,.2); background:rgba(255,255,255,.05); color:#fff; font-family:inherit; }
-  .modal{ position:fixed; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(3px); display:grid; place-items:center; padding:20px; z-index:30; }
-  .modal .m{ background:var(--paper); color:var(--ink); border-radius:20px; padding:26px; max-width:430px; width:100%; }
-  .modal h3{ font-family:'Bricolage Grotesque',sans-serif; font-size:20px; margin:0 0 10px; }
-  .blocs{ display:flex; gap:10px; margin:16px 0 22px; }
-  .bloc{ flex:1; border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px; }
-  .bloc .l{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:26px; }
-  .bloc .d{ font-size:13px; color:#56523F; }
-  .mbtns{ display:flex; gap:10px; }
-  .mbtns button{ flex:1; border-radius:12px; padding:14px; font-weight:800; font-size:15px; cursor:pointer; font-family:inherit; }
 </style>
 </head>
 <body>
-<div class="gate" id="gate"><div class="box">
-  <h1>Pilotage retrait</h1>
-  <p style="color:rgba(255,255,255,.5);margin:8px 0 20px">Saisissez le code magasin</p>
-  <input id="code" type="tel" inputmode="numeric" maxlength="6" placeholder="••••">
-  <p id="err" style="color:var(--red);height:18px;margin-top:10px;font-size:14px"></p>
-</div></div>
-
-<div class="top"><h1>Pilotage · <span class="accent">CHÂTELET</span></h1></div>
-<p class="hint">Touchez les boutons pour faire avancer chaque retrait.</p>
+<div class="top">
+  <h1>Retraits · <span class="accent">CHÂTELET</span></h1>
+  <div class="stats">
+    <span class="stat"><b id="nprep">0</b> <small>à préparer</small></span>
+    <span class="stat"><b id="npret">0</b> <small>prêtes</small></span>
+    <span class="clock" id="clock">--:--</span>
+    <button class="soundbtn" id="sound">🔇 Activer le son</button>
+  </div>
+</div>
 <div class="body" id="board"></div>
-<div id="modalhost"></div>
 <script>
 const SUPABASE_URL="https://svrmgurokzxlaxditxpg.supabase.co";
 const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2cm1ndXJva3p4bGF4ZGl0eHBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MzUzMTMsImV4cCI6MjA5MDAxMTMxM30.s4HcUeau23rHV_zrhslTOdKN6jfLrRfHrnRZ9kokHJI";
 const STORE_ID=new URLSearchParams(location.search).get("store")||"b2c79307-9554-43a3-b7ad-d992e796020b";
-const ACCESS_CODE="1789"; // <-- code à donner aux équipes (modifiable)
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const board=document.getElementById("board");
 const COL={attente:"#F59E0B",recherche:"#3B82F6",introuvable:"#EF4444",partielle:"#F97316",prete:"#10B981"};
 const LBL={attente:"En attente",recherche:"Recherche en cours",introuvable:"Introuvable",partielle:"Partiellement prête",prete:"Prête à être envoyée"};
 const ICO={attente:"◷",recherche:"⌕",introuvable:"⚠",partielle:"➤",prete:"✓"};
 const esc=s=>(s||"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let rows=[];
+let rows=[], known=null, soundOn=false, audio=null;
 
-function mins(ts){ return Math.max(0,Math.floor((Date.now()-new Date(ts).getTime())/60000)); }
-setInterval(()=>{ if(document.getElementById("gate").style.display==="none") render(); },30000);
+function mins(ts){ return Math.max(0, Math.floor((Date.now()-new Date(ts).getTime())/60000)); }
+function tick(){ document.getElementById("clock").textContent=new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}); }
+setInterval(tick,1000); tick();
+setInterval(render,30000); // rafraîchit les minuteurs
 
-// ----- code d'accès -----
-const ci=document.getElementById("code");
-if(sessionStorage.getItem("lpt_ok")==="1") unlock();
-ci.addEventListener("input",()=>{ if(ci.value===ACCESS_CODE){ sessionStorage.setItem("lpt_ok","1"); unlock(); } else if(ci.value.length>=ACCESS_CODE.length){ document.getElementById("err").textContent="Code incorrect"; ci.value=""; } });
-function unlock(){ document.getElementById("gate").style.display="none"; start(); }
-
-async function patch(id,obj){ await sb.from("retail_pickup_checkins").update(obj).eq("id",id); load(); }
-function findNext(r){ const nf=(r.found||0)+1; patch(r.id, nf>=r.paires?{found:nf,status:"prete"}:{found:nf,status:"partielle"}); }
-
-// Marquer introuvable. Si la commande a plusieurs paires et qu'au moins une est déjà
-// trouvée, on SCINDE : la (les) paire(s) trouvée(s) restent prêtes, une nouvelle fiche
-// est créée pour la paire manquante et part dans "À vérifier".
-async function markLost(r){
-  const found=r.found||0;
-  if(r.paires>1 && found>=1 && found<r.paires){
-    const manquantes=r.paires-found;
-    // la fiche d'origine conserve les paires trouvées et passe en "prête"
-    await sb.from("retail_pickup_checkins").update({ paires:found, status:"prete" }).eq("id",r.id);
-    // nouvelle fiche pour les paires manquantes, liée au parent, même client/heure
-    await sb.from("retail_pickup_checkins").insert({
-      store_id:STORE_ID, parent_id:r.parent_id||r.id,
-      nom:r.nom, prenom:r.prenom, telephone:r.telephone,
-      paires:manquantes, found:0, status:"introuvable", arrivee_at:r.arrivee_at
-    });
-  } else {
-    await sb.from("retail_pickup_checkins").update({ status:"introuvable" }).eq("id",r.id);
-  }
-  load();
-}
+function chime(){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)(); if(audio.state==="suspended")audio.resume();
+  const t0=audio.currentTime; [784,1175].forEach((f,i)=>{ const o=audio.createOscillator(),g=audio.createGain(); o.type="sine";o.frequency.value=f;o.connect(g);g.connect(audio.destination);
+  const t=t0+i*0.11; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.16,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+0.4); o.start(t);o.stop(t+0.45); }); }catch(e){} }
+document.getElementById("sound").onclick=()=>{ soundOn=!soundOn; const b=document.getElementById("sound"); b.classList.toggle("on",soundOn); b.textContent=soundOn?"🔊 Son activé":"🔇 Activer le son"; if(soundOn) chime(); };
 
 async function load(){
-  const { data }=await sb.from("retail_pickup_checkins").select("*").eq("store_id",STORE_ID)
+  const { data } = await sb.from("retail_pickup_checkins").select("*").eq("store_id",STORE_ID)
     .not("status","in","(recupere,archive)").order("arrivee_at",{ascending:true});
   rows=data||[]; render();
 }
@@ -122,81 +92,62 @@ function render(){
   const pret=rows.filter(r=>["partielle","prete"].includes(r.status))
     .sort((a,b)=> a.status===b.status ? new Date(a.arrivee_at)-new Date(b.arrivee_at) : a.status==="partielle"?-1:1);
   const lost=rows.filter(r=>r.status==="introuvable");
+  document.getElementById("nprep").textContent=prep.length;
+  document.getElementById("npret").textContent=pret.length;
+
+  // son si nouvelle arrivée (zone à chercher uniquement)
+  const ids=new Set(prep.map(r=>r.id));
+  if(known===null){ known=ids; }
+  else { let isNew=false; ids.forEach(id=>{ if(!known.has(id)) isNew=true; }); known=ids; if(isNew){ if(soundOn) chime(); window.scrollTo({top:0,behavior:"smooth"}); } }
+
   let html="";
   if(!prep.length && !pret.length && !lost.length){ board.innerHTML=`<div class="empty">👓 Aucune commande à préparer.</div>`; return; }
-  html+=`<div class="grid">`+prep.map(card).join("")+`</div>`;
+  html += `<div class="grid">`+prep.map(card).join("")+`</div>`;
   if(pret.length){
-    html+=`<div class="sech"><b>Prêtes / envoyées au comptoir</b><span class="leg"><span class="dot"></span>orange = au moins une dispo</span><span class="ln"></span></div>`;
-    html+=`<div class="chips">`+pret.map(chip).join("")+`</div>`;
+    html += `<div class="sech"><b>Prêtes / envoyées au comptoir</b><span class="leg"><span class="dot"></span>orange = au moins une dispo</span><span class="ln"></span></div>`;
+    html += `<div class="chips">`+pret.map(chip).join("")+`</div>`;
   }
   if(lost.length){
-    html+=`<div class="sech" style="margin-top:34px"><b style="color:var(--red)">⚠ \u00c0 v\u00e9rifier · ${lost.length}</b><span class="ln"></span></div>`;
-    html+=`<div class="grid">`+lost.map(card).join("")+`</div>`;
+    html += `<div class="sech" style="margin-top:34px"><b style="color:var(--red)">⚠ À vérifier · ${lost.length}</b><span class="ln"></span></div>`;
+    html += `<div class="chips">`+lost.map(lostChip).join("")+`</div>`;
   }
   board.innerHTML=html;
-  bind();
 }
 function card(r){
   const lost=r.status==="introuvable"; const m=mins(r.arrivee_at); const urg=r.status==="attente"&&m>=15;
   const found=r.found||0, multi=r.paires>1;
-  const pairs=r.paires>=2?`<span class="pairs">👓 ${r.paires>=3?"3+ PAIRES":"2 PAIRES"}</span>`:`<span class="pairs1">1 paire</span>`;
-  const prog=(multi&&found>0&&found<r.paires)?`<span class="prog">${found}/${r.paires} trouvée${found>1?"s":""}</span>`:"";
-  const nextLbl = (found+1>=r.paires)?"Prête à être envoyée":`Trouvée ${found+1}/${r.paires}`;
-  let acts="";
-  if(r.status==="attente") acts=`<button class="btn" style="background:${COL.recherche}" data-a="rech" data-id="${r.id}">Je cherche</button>`;
-  if(r.status==="recherche") acts=`<button class="btn" style="background:${found+1>=r.paires?COL.prete:COL.recherche}" data-a="find" data-id="${r.id}">${nextLbl}</button>`;
-  if(lost) acts=`<span style="color:rgba(255,255,255,.4);font-size:13px;font-style:italic">Verrouillée — contacter le responsable</span>`;
-  if(!lost) acts+=`<button class="btn ghost" data-a="lost" data-id="${r.id}">Introuvable</button>`;
+  const pairs = r.paires>=2 ? `<span class="pairs">👓 ${r.paires>=3?"3+ PAIRES":"2 PAIRES"}</span>` : `<span class="pairs1">1 paire</span>`;
+  const prog = (multi&&found>0&&found<r.paires) ? `<span class="prog">${found}/${r.paires} trouvée${found>1?"s":""}</span>` : "";
   return `<div class="card ${urg?'urgent':''}">
     <div class="row1"><div class="badge" style="background:${lost?COL.introuvable:'var(--accent)'};color:${lost?'#fff':'#16150F'}">${esc(r.nom?r.nom[0]:'?')}</div>
       <div style="min-width:0;flex:1"><div class="nom">${esc(r.nom)}</div><div class="pre">${esc(r.prenom)} ${pairs}${r.telephone?` <span style="color:rgba(255,255,255,.4);font-size:13px;margin-left:6px">· ${esc(r.telephone)}</span>`:''}</div></div></div>
-    <div class="row2"><div style="display:flex;gap:8px;align-items:center"><span class="pill" style="background:${COL[r.status]}22;color:${COL[r.status]}">${ICO[r.status]} ${LBL[r.status]}</span>${prog}</div>
-      <span class="min ${urg?'urg':''}">${m===0?"à l'instant":m+" min"}</span></div>
-    <div class="acts">${acts}</div></div>`;
+    <div class="row2"><div style="display:flex;gap:8px;align-items:center">
+      <span class="pill" style="background:${COL[r.status]}22;color:${COL[r.status]}">${ICO[r.status]} ${LBL[r.status]}</span>${prog}</div>
+      <span class="min ${urg?'urg':''}">${m===0?"à l'instant":m+" min"}</span></div></div>`;
 }
 function chip(r){
-  const col=r.status==="partielle"?COL.partielle:COL.prete; const found=r.found||0;
-  let extra="", acts="";
-  if(r.status==="partielle"){
-    extra=`<span style="background:${col}33;color:${col};border-radius:7px;padding:3px 9px;font-weight:800;font-size:12.5px">${found}/${r.paires} prête${found>1?"s":""}</span>`;
-    acts=`<button class="btn" style="background:${found+1>=r.paires?COL.prete:COL.partielle}" data-a="find" data-id="${r.id}">${found+1>=r.paires?"Compléter":"Trouvée "+(found+1)+"/"+r.paires}</button>`+
-         `<button class="btn ghost" data-a="lost" data-id="${r.id}">Reste introuvable</button>`;
-  } else if(r.paires>=2){ extra=`<span class="pairs" style="font-size:12px">👓 ${r.paires} paires</span>`; }
+  const col = r.status==="partielle" ? COL.partielle : COL.prete; const found=r.found||0;
+  const tel = r.status==="partielle" && r.telephone ? ` <span style="color:rgba(255,255,255,.45);font-size:13px;margin-left:6px">· ${esc(r.telephone)}</span>` : "";
+  const extra = r.status==="partielle" ? `<span style="background:${col}33;color:${col};border-radius:7px;padding:3px 9px;font-weight:800;font-size:12.5px">${found}/${r.paires} prête${found>1?"s":""}</span>`
+    : (r.paires>=2 ? `<span class="pairs" style="font-size:12px">👓 ${r.paires} paires</span>` : "");
   return `<div class="chip" style="background:${col}1A;border:1px solid ${col}66">
     <span class="cb" style="background:${col}">${esc(r.nom?r.nom[0]:'?')}</span>
-    <span><span class="cn">${esc(r.nom)}</span><span class="cp">${esc(r.prenom)}</span></span>${extra}${acts}</div>`;
+    <span><span class="cn">${esc(r.nom)}</span><span class="cp">${esc(r.prenom)}</span>${tel}</span>${extra}</div>`;
 }
-function bind(){
-  document.querySelectorAll("[data-a]").forEach(b=>{
-    const r=rows.find(x=>x.id===b.dataset.id); if(!r) return;
-    b.onclick=()=>{ const a=b.dataset.a;
-      if(a==="rech") patch(r.id,{status:"recherche"});
-      else if(a==="find") findNext(r);
-      else if(a==="ready") patch(r.id,{status:"prete", found:r.paires});
-      else if(a==="lost") openLost(r);
-    };
-  });
+function lostChip(r){
+  const col=COL.introuvable;
+  return `<div class="chip" style="background:${col}1A;border:1px solid ${col}66">
+    <span class="cb" style="background:${col}">⚠</span>
+    <span><span class="cn">${esc(r.nom)}</span><span class="cp">${esc(r.prenom)}</span></span></div>`;
 }
-function openLost(r){
-  const host=document.getElementById("modalhost");
-  host.innerHTML=`<div class="modal"><div class="m">
-    <h3>Avez-vous vérifié les deux blocs&nbsp;?</h3>
-    <p style="color:#56523F;font-size:16px;line-height:1.5">Le nom et le prénom sont parfois inversés à la commande. Pour <b>${esc(r.prenom)} ${esc(r.nom)}</b>, cherchez dans&nbsp;:</p>
-    <div class="blocs">
-      <div class="bloc"><span class="l">${esc(r.nom?r.nom[0]:'?')}</span><span class="d">bloc ${esc(r.nom?r.nom[0]:'?')}<br>(${esc(r.nom)})</span></div>
-      <div class="bloc"><span class="l">${esc(r.prenom?r.prenom[0]:'?')}</span><span class="d">bloc ${esc(r.prenom?r.prenom[0]:'?')}<br>(${esc(r.prenom)})</span></div>
-    </div>
-    <div class="mbtns">
-      <button id="mcancel" style="border:1px solid var(--line);background:#fff;color:var(--ink)">Annuler</button>
-      <button id="mok" style="border:none;background:var(--red);color:#fff">Confirmer introuvable</button>
-    </div></div></div>`;
-  document.getElementById("mcancel").onclick=()=>host.innerHTML="";
-  document.getElementById("mok").onclick=()=>{ markLost(r); host.innerHTML=""; };
-}
-function start(){
-  sb.channel("ipad-"+STORE_ID).on("postgres_changes",{event:"*",schema:"public",table:"retail_pickup_checkins",filter:"store_id=eq."+STORE_ID}, load).subscribe();
-  load();
-}
+// défilement auto si débordement
+setInterval(()=>{ const max=document.documentElement.scrollHeight-window.innerHeight; if(max<40) return;
+  let t=Math.round(window.scrollY+window.innerHeight*0.82); if(t>=max-4) t=0; window.scrollTo({top:t,behavior:"smooth"}); }, 6000);
+
+sb.channel("ecran-"+STORE_ID)
+  .on("postgres_changes",{event:"*",schema:"public",table:"retail_pickup_checkins",filter:"store_id=eq."+STORE_ID}, load)
+  .subscribe();
+load();
 </script>
 </body>
 </html>
