@@ -120,7 +120,7 @@ function card(r){
   const prog = (multi&&found>0&&found<r.paires) ? `<span class="prog">${found}/${r.paires} trouvée${found>1?"s":""}</span>` : "";
   return `<div class="card ${urg?'urgent':''}">
     <div class="row1"><div class="badge" style="background:${lost?COL.introuvable:'var(--accent)'};color:${lost?'#fff':'#16150F'}">${esc(r.nom?r.nom[0]:'?')}</div>
-      <div style="min-width:0;flex:1"><div class="nom">${esc(r.nom)}</div><div class="pre">${esc(r.prenom)} ${pairs}</div></div></div>
+      <div style="min-width:0;flex:1"><div class="nom">${esc(r.nom)}</div><div class="pre">${esc(r.prenom)} ${pairs}${r.telephone?` <span style="color:rgba(255,255,255,.4);font-size:13px;margin-left:6px">· ${esc(r.telephone)}</span>`:''}</div></div></div>
     <div class="row2"><div style="display:flex;gap:8px;align-items:center">
       <span class="pill" style="background:${COL[r.status]}22;color:${COL[r.status]}">${ICO[r.status]} ${LBL[r.status]}</span>${prog}</div>
       <span class="min ${urg?'urg':''}">${m===0?"à l'instant":m+" min"}</span></div></div>`;
