@@ -120,14 +120,14 @@ function card(r){
   const prog = (multi&&found>0&&found<r.paires) ? `<span class="prog">${found}/${r.paires} trouvée${found>1?"s":""}</span>` : "";
   return `<div class="card ${urg?'urgent':''}">
     <div class="row1"><div class="badge" style="background:${lost?COL.introuvable:'var(--accent)'};color:${lost?'#fff':'#16150F'}">${esc(r.nom?r.nom[0]:'?')}</div>
-      <div style="min-width:0;flex:1"><div class="nom">${esc(r.nom)}</div><div class="pre">${esc(r.prenom)} ${pairs}${r.telephone?` <span style="color:rgba(255,255,255,.4);font-size:13px;margin-left:6px">· ${esc(r.telephone)}</span>`:''}</div></div></div>
+      <div style="min-width:0;flex:1"><div class="nom">${esc(r.nom)}</div><div class="pre">${esc(r.prenom)} ${pairs}</div>${r.telephone?`<div style="color:rgba(255,255,255,.85);font-size:18px;font-weight:700;letter-spacing:.5px;margin-top:6px;font-variant-numeric:tabular-nums">📞 ${esc(r.telephone)}</div>`:''}</div></div>
     <div class="row2"><div style="display:flex;gap:8px;align-items:center">
       <span class="pill" style="background:${COL[r.status]}22;color:${COL[r.status]}">${ICO[r.status]} ${LBL[r.status]}</span>${prog}</div>
       <span class="min ${urg?'urg':''}">${m===0?"à l'instant":m+" min"}</span></div></div>`;
 }
 function chip(r){
   const col = r.status==="partielle" ? COL.partielle : COL.prete; const found=r.found||0;
-  const tel = r.status==="partielle" && r.telephone ? ` <span style="color:rgba(255,255,255,.45);font-size:13px;margin-left:6px">· ${esc(r.telephone)}</span>` : "";
+  const tel = r.status==="partielle" && r.telephone ? `<div style="color:rgba(255,255,255,.85);font-size:16px;font-weight:700;letter-spacing:.3px;margin-top:3px;font-variant-numeric:tabular-nums">📞 ${esc(r.telephone)}</div>` : "";
   const extra = r.status==="partielle" ? `<span style="background:${col}33;color:${col};border-radius:7px;padding:3px 9px;font-weight:800;font-size:12.5px">${found}/${r.paires} prête${found>1?"s":""}</span>`
     : (r.paires>=2 ? `<span class="pairs" style="font-size:12px">👓 ${r.paires} paires</span>` : "");
   return `<div class="chip" style="background:${col}1A;border:1px solid ${col}66">
